@@ -54,7 +54,7 @@ class OnnxWrapper():
 
 class Validator():
     def __init__(self, url):
-        self.onnx = True if url.endswith('.onnx') else False
+        self.onnx = bool(url.endswith('.onnx'))
         torch.hub.download_url_to_file(url, 'inf.model')
         if self.onnx:
             import onnxruntime
@@ -177,10 +177,10 @@ def get_speech_timestamps(audio: torch.Tensor,
             raise TypeError("Audio cannot be casted to tensor. Cast it manually")
 
     if len(audio.shape) > 1:
-        for i in range(len(audio.shape)):  # trying to squeeze empty dimensions
+        for _ in range(len(audio.shape)):
             audio = audio.squeeze(0)
-        if len(audio.shape) > 1:
-            raise ValueError("More than one dimension in audio. Are you trying to process audio with 2 channels?")
+    if len(audio.shape) > 1:
+        raise ValueError("More than one dimension in audio. Are you trying to process audio with 2 channels?")
 
     if sampling_rate > 16000 and (sampling_rate % 16000 == 0):
         step = sampling_rate // 16000
@@ -228,17 +228,14 @@ def get_speech_timestamps(audio: torch.Tensor,
         if (speech_prob < neg_threshold) and triggered:
             if not temp_end:
                 temp_end = window_size_samples * i
-            if (window_size_samples * i) - temp_end < min_silence_samples:
-                continue
-            else:
+            if (window_size_samples * i) - temp_end >= min_silence_samples:
                 current_speech['end'] = temp_end
                 if (current_speech['end'] - current_speech['start']) > min_speech_samples:
                     speeches.append(current_speech)
                 temp_end = 0
                 current_speech = {}
                 triggered = False
-                continue
-
+            continue
     if current_speech and (audio_length_samples - current_speech['start']) > min_speech_samples:
         current_speech['end'] = audio_length_samples
         speeches.append(current_speech)
@@ -256,12 +253,11 @@ def get_speech_timestamps(audio: torch.Tensor,
         else:
             speech['end'] = int(min(audio_length_samples, speech['end'] + speech_pad_samples))
 
-    if return_seconds:
-        for speech_dict in speeches:
+    for speech_dict in speeches:
+        if return_seconds:
             speech_dict['start'] = round(speech_dict['start'] / sampling_rate, 1)
             speech_dict['end'] = round(speech_dict['end'] / sampling_rate, 1)
-    elif step > 1:
-        for speech_dict in speeches:
+        elif step > 1:
             speech_dict['start'] *= step
             speech_dict['end'] *= step
 
@@ -418,20 +414,17 @@ class VADIterator:
                 self.temp_end = self.current_sample
             if self.current_sample - self.temp_end < self.min_silence_samples:
                 return None
-            else:
-                speech_end = self.temp_end + self.speech_pad_samples
-                self.temp_end = 0
-                self.triggered = False
-                return {'end': int(speech_end) if not return_seconds else round(speech_end / self.sampling_rate, 1)}
+            speech_end = self.temp_end + self.speech_pad_samples
+            self.temp_end = 0
+            self.triggered = False
+            return {'end': int(speech_end) if not return_seconds else round(speech_end / self.sampling_rate, 1)}
 
         return None
 
 
 def collect_chunks(tss: List[dict],
                    wav: torch.Tensor):
-    chunks = []
-    for i in tss:
-        chunks.append(wav[i['start']: i['end']])
+    chunks = [wav[i['start']: i['end']] for i in tss]
     return torch.cat(chunks)
 
 
