@@ -67,11 +67,10 @@ class VADAudio(Audio):
 
     def frame_generator(self):
         """Generator that yields all audio frames from microphone."""
-        if self.input_rate == self.RATE_PROCESS:
-            while True:
-                yield self.read()
-        else:
+        if self.input_rate != self.RATE_PROCESS:
             raise Exception("Resampling required")
+        while True:
+            yield self.read()
 
     def vad_collector(self, padding_ms=300, ratio=0.75, frames=None):
         """Generator that yields series of consecutive audio frames comprising each utterence, separated by yielding a single None.
@@ -125,10 +124,7 @@ def main(ARGS):
     (get_speech_ts,_,_, _,_, _, _) = utils
 
 
-    # Stream from microphone to DeepSpeech using VAD
-    spinner = None
-    if not ARGS.nospinner:
-        spinner = Halo(spinner='line')
+    spinner = Halo(spinner='line') if not ARGS.nospinner else None
     wav_data = bytearray()
     for frame in frames:
         if frame is not None:
@@ -159,8 +155,7 @@ def Int2Float(sound):
     _sound = _sound.astype('float32')
     if abs_max > 0:
         _sound *= 1/abs_max
-    audio_float32 = torch.from_numpy(_sound.squeeze())
-    return audio_float32
+    return torch.from_numpy(_sound.squeeze())
 
 if __name__ == '__main__':
     DEFAULT_SAMPLE_RATE = 16000
